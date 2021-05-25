@@ -173,7 +173,7 @@
     UIAlertAction *yesAction = [UIAlertAction actionWithTitle:@"Yes" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
         
         NSError *error = nil;
-        [[NSFileManager defaultManager] removeItemAtPath:PREFS_PATH error:nil];
+        [[NSFileManager defaultManager] removeItemAtPath:PREFS_PATH_TMP error:nil];
 
         [[NSFileManager defaultManager] copyItemAtPath:PREFS_PATH toPath:PREFS_PATH_TMP error:&error];
         
