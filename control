@@ -1,6 +1,6 @@
 Package: com.udevs.vedette
 Name: Vedette
-Version: 1.1.0
+Version: 1.1.1
 Architecture: iphoneos-arm
 Description: Monitor CPU hogging processes
 Maintainer: udevs
