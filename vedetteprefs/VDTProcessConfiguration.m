@@ -10,6 +10,33 @@
 
 @implementation VDTProcessConfiguration
 
+-(void)presentConsentPromptForProcess:(NSString *)process block:(void (^)())understoodBlock{
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"\U000026A0WARNING\U000026A0" message:[NSString stringWithFormat:@"%@ is one of the essential processes for iOS to function properly, if it were to be throttled or terminated, your system might crash. Proceed?", process] preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertAction *yesAction = [UIAlertAction actionWithTitle:@"I Understand" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+        understoodBlock();
+    }];
+    
+    UIAlertAction *noAction = [UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action){
+        [self reloadSpecifier:_enabledSpecifier animated:YES];
+    }];
+    
+    [alert addAction:yesAction];
+    [alert addAction:noAction];
+    
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+-(BOOL)shouldAskForConsent:(NSString *)process{
+    NSArray *consensualProcess = @[
+        @"xpcproxy",
+        @"backboardd",
+        @"SpringBoard",
+        @"launchd",
+        @"sshd"
+    ];
+    return [consensualProcess containsObject:process];
+}
+
 - (NSString*)validIdentifier{
     return  [self configurationType] == VDTConfigTypeApp ? [[self specifier] propertyForKey:@"applicationIdentifier"] : [[self specifier] propertyForKey:@"daemonName"];
 }
@@ -37,6 +64,7 @@
         [monitorEnabledSpec setProperty:(isPreferencesApp?@NO:@YES) forKey:@"enabled"];
         [monitorEnabledSpec setProperty:VEDETTE_IDENTIFIER forKey:@"defaults"];
         [monitorEnabledSpec setProperty:PREFS_CHANGED_NN forKey:@"PostNotification"];
+        _enabledSpecifier = monitorEnabledSpec;
         [rootSpecifiers addObject:monitorEnabledSpec];
         
         
@@ -88,22 +116,32 @@
 
 - (void)setProcessConfigValue:(id)value specifier:(PSSpecifier*)specifier{
     NSString *key = [specifier propertyForKey:@"key"];
-    setValueForProcessConfigKey([self validIdentifier], key, value, [self configurationType]);
     
     if ([key isEqualToString:@"enabled"]){
-        UIViewController *parentController = (UIViewController *)[self valueForKey:@"_parentController"];
+        void (^setValueBlock)() = ^{
+            setValueForProcessConfigKey([self validIdentifier], key, value, [self configurationType]);
 
-        switch ([self configurationType]) {
-            case VDTConfigTypeApp:{
-                [(VDTApplicationListSubcontrollerController *)parentController reloadSpecifier:[(VDTApplicationListSubcontrollerController *)parentController specifierForApplicationWithIdentifier:[self validIdentifier]] animated:NO];
-                break;
+            UIViewController *parentController = (UIViewController *)[self valueForKey:@"_parentController"];
+
+            switch ([self configurationType]) {
+                case VDTConfigTypeApp:{
+                    [(VDTApplicationListSubcontrollerController *)parentController reloadSpecifier:[(VDTApplicationListSubcontrollerController *)parentController specifierForApplicationWithIdentifier:[self validIdentifier]] animated:NO];
+                    break;
+                }
+                case VDTConfigTypeDaemon:{
+                    [(CHPDaemonListController *)parentController reloadValueOfSelectedSpecifier];
+                    break;
+                }
+                default:
+                    break;
             }
-            case VDTConfigTypeDaemon:{
-                [(CHPDaemonListController *)parentController reloadValueOfSelectedSpecifier];
-                break;
-            }
-            default:
-                break;
+        };
+        
+        if ([self shouldAskForConsent:[self validIdentifier]] && [value boolValue]){
+            [self presentConsentPromptForProcess:[self validIdentifier] block:setValueBlock];
+            return;
+        }else{
+            setValueBlock();
         }
     }else if ([key isEqualToString:@"violationPolicy"]){
         switch ([value unsignedLongValue]) {
@@ -139,6 +177,5 @@
     }
     return value;
 }
-
 
 @end

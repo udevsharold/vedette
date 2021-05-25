@@ -10,6 +10,7 @@
 
 @interface VDTProcessConfiguration : PSListController{
     PSSpecifier *_intervalSpecifier;
+    PSSpecifier *_enabledSpecifier;
 }
 
 @end
