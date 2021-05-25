@@ -10,6 +10,13 @@ typedef NS_ENUM(NSUInteger, VDTConfigType) {
     VDTConfigTypeDaemon
 };
 
+typedef NS_ENUM(NSUInteger, VDTViolationPolicy) {
+    VDTViolationPolicyNone,
+    VDTViolationPolicyMonitor,
+    VDTViolationPolicyMonitorAndTerminate,
+    VDTViolationPolicyThrottle
+};
+
 #ifdef __cplusplus
 extern "C" {
 #endif

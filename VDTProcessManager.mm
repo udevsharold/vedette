@@ -83,11 +83,11 @@ void monitor_pids(NSArray <NSNumber *> *pids, NSArray <NSNumber *> *percentages,
             proc_disable_cpumon(pid);
             
             if (percentage > 0 && interval > 0){
-                if (!proc_set_cpumon_params_fatal(pid, percentage, interval)){
+                if (proc_set_cpumon_params_fatal(pid, percentage, interval) == 0){
                     HBLogDebug(@"Monitoring pid %d with percentage %d%% and interval %ds", pid, percentage, interval);
                 }
             }else{
-                if (!proc_set_cpumon_defaults(pid)){
+                if (proc_set_cpumon_defaults(pid) == 0){
                     HBLogDebug(@"Restore CPU limits for pid: %d", pid);
                 }
             }
@@ -97,24 +97,56 @@ void monitor_pids(NSArray <NSNumber *> *pids, NSArray <NSNumber *> *percentages,
     }
 }
 
-void monitor_new_proc(pid_t pid){
+void throttle_pids(NSArray <NSNumber *> *pids, NSArray <NSNumber *> *percentages){
+    
+    for (NSUInteger idx = 0; idx < pids.count; idx++){
+        pid_t pid = [pids[idx] intValue];
+        if (pid > 0){
+            int percentage = [percentages[idx] intValue];
+            
+            if (percentage > 0){
+                if (proc_setcpu_percentage(pid, PROC_SETCPU_ACTION_THROTTLE, percentage) == 0){
+                    HBLogDebug(@"Throttled pid %d with percentage %d%% ", pid, percentage);
+                }
+            }else{
+                if (proc_clear_cpulimits(pid) == 0){
+                    HBLogDebug(@"Restored CPU limits for pid %d ", pid);
+                }
+            }
+        }
+    }
+}
+
+void received_new_proc(pid_t pid){
     
     int percentage = 80;
     int interval = 120;
     
     LSApplicationProxy *appProxy = appproxy_from_pid(pid);
+    VDTViolationPolicy violationPolicy = VDTViolationPolicyMonitorAndTerminate;
     
     if (appProxy.bundleIdentifier){ //isApplication
         percentage = [valueForProcessConfigKeyWithPrefs(appProxy.bundleIdentifier, @"percentage", @80, VDTConfigTypeApp, prefs) intValue];
         interval = [valueForProcessConfigKeyWithPrefs(appProxy.bundleIdentifier, @"interval", @120, VDTConfigTypeApp, prefs) intValue];
+        violationPolicy = [valueForProcessConfigKeyWithPrefs(appProxy.bundleIdentifier, @"violationPolicy", @(VDTViolationPolicyMonitorAndTerminate), VDTConfigTypeApp, prefs) unsignedLongValue];
     }else{ //isDaemon
         NSString *daemonName = name_from_pid(pid);
         percentage = [valueForProcessConfigKeyWithPrefs(daemonName, @"percentage", @80, VDTConfigTypeDaemon, prefs) intValue];
         interval = [valueForProcessConfigKeyWithPrefs(daemonName, @"interval", @120, VDTConfigTypeDaemon, prefs) intValue];
+        violationPolicy = [valueForProcessConfigKeyWithPrefs(daemonName, @"violationPolicy", @(VDTViolationPolicyMonitorAndTerminate), VDTConfigTypeDaemon, prefs) unsignedLongValue];
+
     }
     
-    
-    monitor_pids(@[@(pid)], @[@(percentage)], @[@(interval)]);
+    switch (violationPolicy) {
+        case VDTViolationPolicyMonitorAndTerminate:
+            monitor_pids(@[@(pid)], @[@(percentage)], @[@(interval)]);
+            break;
+        case VDTViolationPolicyThrottle:
+            throttle_pids(@[@(pid)], @[@(percentage)]);
+            break;
+        default:
+            break;
+    }
 }
 
 /*

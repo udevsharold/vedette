@@ -16,7 +16,8 @@ extern "C" {
 
 NSArray* pids_with_identifier_and_type(NSArray <NSString *>*identifiers, NSArray <NSNumber *> *types);
 void monitor_pids(NSArray <NSNumber *> *pids, NSArray <NSNumber *> *percentages, NSArray <NSNumber *> *intervals);
-void monitor_new_proc(pid_t pid);
+void throttle_pids(NSArray <NSNumber *> *pids, NSArray <NSNumber *> *percentages);
+void received_new_proc(pid_t pid);
 //void restore_all_monitors();
 
 #ifdef __cplusplus

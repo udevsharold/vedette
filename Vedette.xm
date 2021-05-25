@@ -35,7 +35,8 @@ static void reloadPrefs(){
         NSMutableArray *intervals = [NSMutableArray array];
         NSMutableArray *identifiers = [NSMutableArray array];
         NSMutableArray *types = [NSMutableArray array];
-        
+        NSMutableArray *violationPolicies = [NSMutableArray array];
+
         NSArray *appConfigs = prefs[@"appConfigs"];
         HBLogDebug(@"appConfigs: %@", appConfigs);
         
@@ -48,10 +49,11 @@ static void reloadPrefs(){
             [types addObject:@(VDTConfigTypeApp)];
             int percentage = [valueForProcessConfigKeyWithPrefs(bundleIdentifier, @"percentage", @80, VDTConfigTypeApp, prefs) intValue];
             int interval = [valueForProcessConfigKeyWithPrefs(bundleIdentifier, @"interval", @120, VDTConfigTypeApp, prefs) intValue];
+            VDTViolationPolicy violationPolicy = [valueForProcessConfigKeyWithPrefs(bundleIdentifier, @"violationPolicy", @(VDTViolationPolicyMonitorAndTerminate), VDTConfigTypeApp, prefs) unsignedLongValue];
             BOOL processEnabled = [valueForProcessConfigKeyWithPrefs(bundleIdentifier, @"enabled", @NO, VDTConfigTypeApp, prefs) boolValue];
             [percentages addObject:@(enabled && processEnabled ? percentage : 0)];
             [intervals addObject:@(enabled && processEnabled ? interval : 0)];
-            
+            [violationPolicies addObject:@(enabled && processEnabled ? violationPolicy : VDTViolationPolicyNone)];
         }
         
         NSArray *daemonConfigs = prefs[@"daemonConfigs"];
@@ -63,17 +65,28 @@ static void reloadPrefs(){
             [types addObject:@(VDTConfigTypeDaemon)];
             int percentage = [valueForProcessConfigKeyWithPrefs(daemonName, @"percentage", @80, VDTConfigTypeDaemon, prefs) intValue];
             int interval = [valueForProcessConfigKeyWithPrefs(daemonName, @"interval", @120, VDTConfigTypeDaemon, prefs) intValue];
+            VDTViolationPolicy violationPolicy = [valueForProcessConfigKeyWithPrefs(daemonName, @"violationPolicy", @(VDTViolationPolicyMonitorAndTerminate), VDTConfigTypeDaemon, prefs) unsignedLongValue];
             BOOL processEnabled = [valueForProcessConfigKeyWithPrefs(daemonName, @"enabled", @NO, VDTConfigTypeDaemon, prefs) boolValue];
             [percentages addObject:@(enabled && processEnabled ? percentage : 0)];
             [intervals addObject:@(enabled && processEnabled ? interval : 0)];
+            [violationPolicies addObject:@(enabled && processEnabled ? violationPolicy : VDTViolationPolicyNone)];
         }
         
-        HBLogDebug(@"identifiers: %@", identifiers);
-        NSArray *pids = pids_with_identifier_and_type(identifiers, types);
-        HBLogDebug(@"pids: %@ ** %@ ** %@", pids, percentages, intervals);
+        NSIndexSet *monitorIndices = [violationPolicies indexesOfObjectsWithOptions:NSEnumerationConcurrent passingTest:^(NSNumber *violationPolicy, NSUInteger idx, BOOL *stop) {
+            return [violationPolicy unsignedLongValue] == VDTViolationPolicyMonitorAndTerminate;
+        }];
+                
+        NSArray *pids = pids_with_identifier_and_type([identifiers objectsAtIndexes:monitorIndices], [types objectsAtIndexes:monitorIndices]);
+        monitor_pids(pids, [percentages objectsAtIndexes:monitorIndices], [intervals objectsAtIndexes:monitorIndices]);
+        HBLogDebug(@"Monitor ** pids: %@ ** %@ ** %@", pids, [percentages objectsAtIndexes:monitorIndices], [intervals objectsAtIndexes:monitorIndices]);
         
-        monitor_pids(pids, percentages, intervals);
-        
+        [identifiers removeObjectsAtIndexes:monitorIndices];
+        [types removeObjectsAtIndexes:monitorIndices];
+        [percentages removeObjectsAtIndexes:monitorIndices];
+        [intervals removeObjectsAtIndexes:monitorIndices];
+
+        pids = pids_with_identifier_and_type(identifiers, types);
+        throttle_pids(pids, percentages);
     });
 }
 
@@ -101,10 +114,11 @@ static void restoreAllMonitors(){
             }
         }
         
-        //Restore all monitors
+        //Restore all monitors and cpu limits
         NSArray *pids = pids_with_identifier_and_type(identifiers, types);
         monitor_pids(pids, zeroesArray, zeroesArray);
-        
+        throttle_pids(pids, zeroesArray);
+
         [[NSFileManager defaultManager] removeItemAtPath:PREFS_PATH_TMP error:nil];
     });
 }
@@ -132,7 +146,7 @@ static void restoreAllMonitors(){
                             uint64_t pid = 0;
                             notify_get_state(token, &pid);
                             if (pid > 0){
-                                monitor_new_proc((pid_t)pid);
+                                received_new_proc((pid_t)pid);
                             }
                         });
                         CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)reloadPrefs, (CFStringRef)PREFS_CHANGED_NN, NULL, CFNotificationSuspensionBehaviorDeliverImmediately);

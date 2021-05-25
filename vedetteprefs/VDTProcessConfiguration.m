@@ -24,6 +24,7 @@
         
         NSString *validIdentifier = [self validIdentifier];
         BOOL isPreferencesApp = [validIdentifier isEqualToString:@"com.apple.Preferences"];
+        
         //Enabled
         PSSpecifier *monitorEnabledGroupSpec = [PSSpecifier preferenceSpecifierNamed:@"Monitor" target:nil set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [monitorEnabledGroupSpec setProperty:@"Terminate process when it violates the maximum allowed CPU usage based on the interval." forKey:@"footerText"];
@@ -39,9 +40,22 @@
         [rootSpecifiers addObject:monitorEnabledSpec];
         
         
+        //Violation Policy
+        PSSpecifier *violationPolicyGroupSpec = [PSSpecifier preferenceSpecifierNamed:@"" target:nil set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+        [violationPolicyGroupSpec setProperty:@"Action for CPU limits violation." forKey:@"footerText"];
+        [rootSpecifiers addObject:violationPolicyGroupSpec];
+        
+        PSSpecifier *violationPolicySelectionSpec = [PSSpecifier preferenceSpecifierNamed:@"Violation Policy Selection" target:self set:@selector(setProcessConfigValue:specifier:) get:@selector(readProcessConfigValue:) detail:nil cell:PSSegmentCell edit:nil];
+        [violationPolicySelectionSpec setValues:@[@(VDTViolationPolicyMonitorAndTerminate), @(VDTViolationPolicyThrottle)] titles:@[@"Terminate", @"Throttle"]];
+        [violationPolicySelectionSpec setProperty:@(VDTViolationPolicyMonitorAndTerminate) forKey:@"default"];
+        [violationPolicySelectionSpec setProperty:@"violationPolicy" forKey:@"key"];
+        [violationPolicySelectionSpec setProperty:VEDETTE_IDENTIFIER forKey:@"defaults"];
+        [violationPolicySelectionSpec setProperty:PREFS_CHANGED_NN forKey:@"PostNotification"];
+        [rootSpecifiers addObject:violationPolicySelectionSpec];
+        
         //CPU Usage Percentage
         PSSpecifier *maxCPUUsageGroupSpec = [PSSpecifier preferenceSpecifierNamed:@"Parameters" target:nil set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [maxCPUUsageGroupSpec setProperty:@"Set maximum allowed CPU usage and interval (s)." forKey:@"footerText"];
+        [maxCPUUsageGroupSpec setProperty:@"Set maximum allowed CPU usage and/or interval (s).\n\nWARNING: If throttle percentage is set to too low, iOS will terminate it regardless due to timeout and not being able to finish tasks on time." forKey:@"footerText"];
         [rootSpecifiers addObject:maxCPUUsageGroupSpec];
         
         PSTextFieldSpecifier* maxCPUUsageSpec = [PSTextFieldSpecifier preferenceSpecifierNamed:@"Percentage" target:self set:@selector(setProcessConfigValue:specifier:) get:@selector(readProcessConfigValue:) detail:nil cell:PSEditTextCell edit:nil];
@@ -63,6 +77,7 @@
         [intervalSpec setProperty:@"Interval" forKey:@"label"];
         [intervalSpec setProperty:PREFS_CHANGED_NN forKey:@"PostNotification"];
         [intervalSpec setProperty:VEDETTE_IDENTIFIER forKey:@"defaults"];
+        _intervalSpecifier = intervalSpec;
         [rootSpecifiers addObject:intervalSpec];
         
         _specifiers = rootSpecifiers;
@@ -90,12 +105,39 @@
             default:
                 break;
         }
+    }else if ([key isEqualToString:@"violationPolicy"]){
+        switch ([value unsignedLongValue]) {
+            case VDTViolationPolicyMonitorAndTerminate:
+                [_intervalSpecifier setProperty:@YES forKey:@"enabled"];
+                break;
+            case VDTViolationPolicyThrottle:
+                [_intervalSpecifier setProperty:@NO forKey:@"enabled"];
+                break;
+            default:
+                break;
+        }
+        [self reloadSpecifier:_intervalSpecifier animated:YES];
     }
     
 }
 
 - (id)readProcessConfigValue:(PSSpecifier*)specifier{
-    return valueForProcessConfigKey([self validIdentifier], [specifier propertyForKey:@"key"], [specifier propertyForKey:@"default"], [self configurationType]);
+    NSString *key = [specifier propertyForKey:@"key"];
+    id value = valueForProcessConfigKey([self validIdentifier], key, [specifier propertyForKey:@"default"], [self configurationType]);
+    if ([key isEqualToString:@"violationPolicy"]){
+        switch ([value unsignedLongValue]) {
+            case VDTViolationPolicyMonitorAndTerminate:
+                [_intervalSpecifier setProperty:@YES forKey:@"enabled"];
+                break;
+            case VDTViolationPolicyThrottle:
+                [_intervalSpecifier setProperty:@NO forKey:@"enabled"];
+                break;
+            default:
+                break;
+        }
+        [self reloadSpecifier:_intervalSpecifier animated:YES];
+    }
+    return value;
 }
 
 
