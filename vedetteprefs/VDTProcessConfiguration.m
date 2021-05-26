@@ -117,31 +117,32 @@
 - (void)setProcessConfigValue:(id)value specifier:(PSSpecifier*)specifier{
     NSString *key = [specifier propertyForKey:@"key"];
     
-    if ([key isEqualToString:@"enabled"]){
-        void (^setValueBlock)() = ^{
-            setValueForProcessConfigKey([self validIdentifier], key, value, [self configurationType]);
-
-            UIViewController *parentController = (UIViewController *)[self valueForKey:@"_parentController"];
-
-            switch ([self configurationType]) {
-                case VDTConfigTypeApp:{
-                    [(VDTApplicationListSubcontrollerController *)parentController reloadSpecifier:[(VDTApplicationListSubcontrollerController *)parentController specifierForApplicationWithIdentifier:[self validIdentifier]] animated:NO];
-                    break;
-                }
-                case VDTConfigTypeDaemon:{
-                    [(CHPDaemonListController *)parentController reloadValueOfSelectedSpecifier];
-                    break;
-                }
-                default:
-                    break;
-            }
-        };
+    void (^setValueBlock)() = ^{
+        setValueForProcessConfigKey([self validIdentifier], key, value, [self configurationType]);
         
+        UIViewController *parentController = (UIViewController *)[self valueForKey:@"_parentController"];
+        
+        switch ([self configurationType]) {
+            case VDTConfigTypeApp:{
+                [(VDTApplicationListSubcontrollerController *)parentController reloadSpecifier:[(VDTApplicationListSubcontrollerController *)parentController specifierForApplicationWithIdentifier:[self validIdentifier]] animated:NO];
+                break;
+            }
+            case VDTConfigTypeDaemon:{
+                [(CHPDaemonListController *)parentController reloadValueOfSelectedSpecifier];
+                break;
+            }
+            default:
+                break;
+        }
+    };
+    
+    if ([key isEqualToString:@"enabled"]){
         if ([self shouldAskForConsent:[self validIdentifier]] && [value boolValue]){
             [self presentConsentPromptForProcess:[self validIdentifier] block:setValueBlock];
             return;
         }else{
             setValueBlock();
+            return;
         }
     }else if ([key isEqualToString:@"violationPolicy"]){
         switch ([value unsignedLongValue]) {
@@ -156,7 +157,7 @@
         }
         [self reloadSpecifier:_intervalSpecifier animated:YES];
     }
-    
+    setValueBlock();
 }
 
 - (id)readProcessConfigValue:(PSSpecifier*)specifier{
