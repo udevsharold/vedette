@@ -158,7 +158,7 @@ static void restoreAllMonitors(){
                             return;
                         }
                         NSDictionary *weakPrefs = getPrefs();
-                        id enabledVal = valueForKeyWithPrefs(@"enabled", prefs);
+                        id enabledVal = valueForKeyWithPrefs(@"enabled", weakPrefs);
                         BOOL enabled = enabledVal ? [enabledVal boolValue] : YES;
                         BOOL processEnabled = [valueForProcessConfigKeyWithPrefs((isApplication ? bundleIdentifier : processName), @"enabled", @NO, (isApplication ? VDTConfigTypeApp : VDTConfigTypeDaemon), weakPrefs) boolValue];
                         if (enabled && processEnabled){
